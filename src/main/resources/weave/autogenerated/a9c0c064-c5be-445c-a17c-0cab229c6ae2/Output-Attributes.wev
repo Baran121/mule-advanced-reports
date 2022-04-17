@@ -1,0 +1,39 @@
+%dw 2.0
+
+type auto_a9c0c064_c5be_445c_a17c_0cab229c6ae2_Output_Attributes = {|
+  clientCertificate?: java_security_cert_Certificate, 
+  headers?: { _?: String }, 
+  listenerPath?: String, 
+  localAddress?: String, 
+  maskedRequestPath?: String, 
+  method?: String, 
+  queryParams?: anonymousType_5, 
+  queryString?: String, 
+  rawRequestPath?: String, 
+  rawRequestUri?: String, 
+  relativePath?: String, 
+  remoteAddress?: String, 
+  requestPath?: String, 
+  requestUri?: String, 
+  scheme?: String, 
+  uriParams?: { _?: String }, 
+  version?: String
+|} {"typeId": "org.mule.extension.http.api.HttpRequestAttributes"}
+type java_security_cert_Certificate = {|
+  encoded?: Binary, 
+  publicKey?: java_security_PublicKey, 
+  "type"?: String
+|} {"typeId": "java.security.cert.Certificate"}
+type java_security_PublicKey = {|
+  algorithm?: String, 
+  encoded?: Binary, 
+  format?: String
+|} {"typeId": "java.security.PublicKey"}
+
+
+
+
+type anonymousType_5 = { _?: String }
+
+
+

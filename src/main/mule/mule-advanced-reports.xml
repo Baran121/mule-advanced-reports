@@ -1,0 +1,203 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:secure-properties="http://www.mulesoft.org/schema/mule/secure-properties" xmlns:os="http://www.mulesoft.org/schema/mule/os"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:spring="http://www.mulesoft.org/schema/mule/spring" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/spring http://www.mulesoft.org/schema/mule/spring/current/mule-spring.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/os http://www.mulesoft.org/schema/mule/os/current/mule-os.xsd
+http://www.mulesoft.org/schema/mule/secure-properties http://www.mulesoft.org/schema/mule/secure-properties/current/mule-secure-properties.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="f0476c6a-242f-47d7-ad8e-cc873a360d3c" >
+		<http:listener-connection host="0.0.0.0" port="${http.port}" />
+	</http:listener-config>
+	<http:request-config name="Anypoint_HTTP_Request_configuration" doc:name="HTTP Request configuration" doc:id="d6d09ae6-2461-4c3f-9872-6c8d5cb22b07" enableCookies="false">
+		<http:request-connection protocol="HTTPS" host="anypoint.mulesoft.com" />
+	</http:request-config>
+	<secure-properties:config name="Secure_Properties_Config" doc:name="Secure Properties Config" doc:id="734a5769-8a88-4434-a225-2c1bf412f7f9" file="dev.yaml" key="0123456789012345" >
+		<secure-properties:encrypt algorithm="Blowfish" />
+	</secure-properties:config>
+	<configuration-properties doc:name="Configuration properties" doc:id="9c8de1ec-809d-465d-8b2c-491af5e78e6e" file="dev.yaml" />
+	<flow name="get-essential-details" doc:id="a9c0c064-c5be-445c-a17c-0cab229c6ae2" >
+		<http:request method="POST" doc:name="login Request" doc:id="e335b422-3747-46a2-bd45-1dc7617441fe" config-ref="Anypoint_HTTP_Request_configuration" path="/accounts/login" targetValue='#["Bearer " ++ payload.access_token]' target="AuthorizationToken">
+					<http:body><![CDATA[#[%dw 2.0
+output application/json
+---
+{
+    "username": p('secure::anypoint.username'),
+    "password": p('secure::anypoint.password')
+}]]]></http:body>
+				</http:request>
+		<http:request method="GET" doc:name="fetch orgId Request" doc:id="50914e07-3a3d-4ee3-b81c-1bf64eb6b326" config-ref="Anypoint_HTTP_Request_configuration" path="/accounts/api/me" target="orgId" targetValue="#[payload.user.organizationId]">
+					<http:headers><![CDATA[#[output application/java
+---
+{
+	Authorization : vars.AuthorizationToken
+}]]]></http:headers>
+				</http:request>
+		<http:request method="GET" doc:name="get environments" doc:id="d6f62f74-c7e9-41fc-a4c2-62901a6f7a97" config-ref="Anypoint_HTTP_Request_configuration" path='#["/accounts/api/organizations/" ++ vars.orgId ++ "/environments"]' target="environments">
+							<http:headers><![CDATA[#[output application/java
+---
+{
+	Authorization  : vars.AuthorizationToken
+}]]]></http:headers>
+						</http:request>
+	</flow>
+	<flow name="update-vcores-flow" doc:id="c899dd84-3c07-4b4f-8a18-2f87d04b43e2" >
+		
+				<http:request method="GET" doc:name="get hierarchy" doc:id="6caa6f47-18d9-4650-8850-e131b4cd9056" config-ref="Anypoint_HTTP_Request_configuration" path='#["/accounts/api/organizations/" ++ vars.orgId ++ "/hierarchy"]'>
+					<http:headers><![CDATA[#[output application/java
+---
+{
+	Authorization : vars.AuthorizationToken
+}]]]></http:headers>
+				</http:request>
+				<set-variable value="#[[]]" doc:name="Set Variable" doc:id="962007e5-be26-44a2-8519-9412f05f81f1" variableName="usageInfo" />
+				<foreach doc:name="For Each Business Group" doc:id="72febc9f-88a0-4f68-82bd-0e4d4e2f2d59" collection="#[payload.subOrganizations]">
+							<http:request method="GET" doc:name="usage-Request" doc:id="263420f3-874c-4905-8ee2-5bea95fe4ad5" config-ref="Anypoint_HTTP_Request_configuration" path='#["/accounts/api/cs/organizations/"++ payload.id ++ "/usage"]' target="usage">
+								<http:headers><![CDATA[#[output application/java
+---
+{
+	Authorization  : vars.AuthorizationToken
+}]]]></http:headers>
+							</http:request>
+							<ee:transform doc:name="Transform Message" doc:id="8a41d6b9-6da5-4c79-9ae9-fe2e52e08926">
+								<ee:message>
+									<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"BG_Name":payload.name,
+	"Production_assinged":payload.entitlements.vCoresProduction.assigned,
+	"production_consumed": vars.usage,
+	"Sandbox_assinged": payload.entitlements.vCoresSandbox.assigned,
+	"Sandbox_consumed": vars.usage.sandboxVCoresConsumed,
+	"Design_assinged":	payload.entitlements.vCoresDesign.assigned,
+	"Design_consumed": vars.usage.designVCoresConsumed
+}
+]]></ee:set-payload>
+								</ee:message>
+							</ee:transform>
+							<ee:transform doc:name="Concantinate Usage Response" doc:id="0687387e-52f2-4429-ac29-42aa3f1a1e14">
+								<ee:message>
+								</ee:message>
+								<ee:variables>
+									<ee:set-variable variableName="usageInfo"><![CDATA[%dw 2.0
+output application/json
+---
+vars.usageInfo + payload 
+
+]]></ee:set-variable>
+								</ee:variables>
+							</ee:transform>
+						</foreach>
+						<ee:transform doc:name="" doc:id="1ee818b3-7574-4a81-ab30-62e0acc3a35b">
+							<ee:message>
+								<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"BG": vars.usageInfo 
+}]]></ee:set-payload>
+							</ee:message>
+						</ee:transform>
+		
+	</flow>
+	<flow name="mule-advanced-reportsFlow" doc:id="b44162fd-0719-4533-95a0-2741737a4c6f" >
+		<http:listener doc:name="Listener" doc:id="1e84a2a8-5235-4794-9945-610e2b5ffb29" config-ref="HTTP_Listener_config" path="/home"/>
+		<flow-ref doc:name="Flow Reference" doc:id="8aefb49e-a158-482d-9c88-4ff0c57ad526" name="get-essential-details" />
+		<flow-ref doc:name="get vcores-update-flow" doc:id="06cb85bd-f6cb-4d2e-b002-afd550345bcd" name="update-vcores-flow" target="vCoreDetails"/>
+		<choice doc:name="Choice" doc:id="3168ef3c-2d71-441e-8d34-be6f19be35e2" >
+			<when expression="#[payload != null and not (isEmpty(payload))]">
+				<ee:transform doc:name="Transform Message" doc:id="e467aed5-c440-40a5-ae86-9d86e9172a2b">
+					<ee:message>
+						<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+					</ee:message>
+					<ee:variables >
+						<ee:set-variable variableName="_environment" ><![CDATA[%dw 2.0
+output application/json
+---
+payload.fEnv]]></ee:set-variable>
+						<ee:set-variable variableName="_BG" ><![CDATA[%dw 2.0
+output application/json
+---
+payload.fBG]]></ee:set-variable>
+					</ee:variables>
+				</ee:transform>
+				<ee:transform doc:name="set environments" doc:id="85196d33-903b-468f-9bbc-86fef2448ccb" >
+					<ee:message >
+					</ee:message>
+					<ee:variables >
+						<ee:set-variable variableName="currentValues" ><![CDATA[%dw 2.0
+output application/json
+---
+((vars.environments.data filter $.name == payload.fEnv) map{
+    "Env_id":$.id,
+    "organization_Id": $.organizationId
+})reduce ($++$$)]]></ee:set-variable>
+					</ee:variables>
+				</ee:transform>
+				<http:request method="GET" doc:name="get applications" doc:id="37458b5d-faa1-442e-aa0e-456fd7462b8e" config-ref="Anypoint_HTTP_Request_configuration" path="/armui/api/v1/applications" target="applications">
+					<http:headers ><![CDATA[#[output application/java
+---
+{
+	"X-ANYPNT-ORG-ID" : vars.currentValues.Ord_id,
+	"X-ANYPNT-ENV-ID":	vars.currentValues.Env_id,
+	"Authorization": vars.AuthorizationToken
+}]]]></http:headers>
+				</http:request>
+				<parallel-foreach doc:name="Parallel For Each" doc:id="13f847b0-7e06-4173-8fd2-acda18377478" collection="#[vars.applications.data]" maxConcurrency="4">
+					<http:request method="GET" doc:name="get each Application Details" doc:id="28b5d8f4-7bee-4e7c-8665-bd68c5657761" config-ref="Anypoint_HTTP_Request_configuration" path='#["cloudhub/api/v2/applications/" ++ payload.id]' responseTimeout="120000" >
+						<http:headers ><![CDATA[#[output application/java
+---
+{
+	"Authorization" :  vars.AuthorizationToken,
+	"X-ANYPNT-ORG-ID": vars.currentValues.orgId,
+	"X-ANYPNT-ENV-ID": vars.currentValues.Env_id
+}]]]></http:headers>
+					</http:request>
+				</parallel-foreach>
+				<ee:transform doc:name="Collect the parallel foreach results" doc:id="3c19a208-c07d-490c-a457-dbe12592f8d0">
+					<ee:message />
+					<ee:variables>
+						<ee:set-variable variableName="appDetails" ><![CDATA[%dw 2.0
+output application/json
+---
+payload.payload map 
+{
+    "applicationName": $.domain,
+    "memory": $.workers[0].memory,
+    "cpu": $.workers[0].cpu,
+    "noofworkers" : $.workers.amount,
+    "remainingOrgWorkers" : $.workers.remainingOrgWorkers,
+    "muleVersion": $.muleVersion.version,
+    "region" : $.region,
+    "staticIPsEnabled": $.staticIPsEnabled
+}]]></ee:set-variable>
+					</ee:variables>
+				</ee:transform>
+				<logger level="INFO" doc:name="Logger" doc:id="cff8310b-5440-49cd-b655-c8360eac8417" />
+			</when>
+		</choice>
+		<ee:transform doc:name="Transform Message" doc:id="8e98b3a4-27e0-4234-b267-cecad3f1b865">
+					<ee:message>
+						<ee:set-payload><![CDATA[%dw 2.0
+output application/json skipNullOn="everywhere"
+---
+{
+	env: vars.environments,
+	bg: vars.vCoreDetails,
+	appDetails: vars.appDetails,
+	previous: {
+		fEnv: vars."_environment",
+		fBG: vars."_BG"
+	}
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+		<parse-template doc:name="Parse Template" doc:id="9eb12fd8-d5ff-4462-a078-3ca3a955d11f" location="view/updateme.html"/>
+	</flow>
+</mule>

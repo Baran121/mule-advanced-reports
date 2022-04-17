@@ -1,0 +1,168 @@
+<html>
+<head>
+<style>
+* {
+  box-sizing: border-box; 
+}
+
+.row {
+  margin-left:-5px;
+  margin-right:-5px;
+}
+  
+.column {
+  float: left;
+  width: 50%;
+  padding: 2px;
+  th, td {
+  padding: 15px;
+  text-align: left;
+}
+ 
+ }
+
+table, th, td {
+  border: 1px solid;
+}
+  
+.scolumn {
+  float: left;
+  width: 50%;
+  padding: 2px;
+  width:320px; 
+  height:150px; 
+  overflow:auto;
+}
+ 
+
+tr:nth-child(even) {
+  background-color: #f2f2f2;
+}
+
+
+/* Responsive layout - makes the two columns stack on top of each other instead of next to each other on screens that are smaller than 600 px */
+@media screen and (max-width: 600px) {
+  .column {
+    width: 100%;
+  }
+}
+
+</style>
+</head>
+	<body>
+		<form method="post">
+		<div class="row">
+		  <div class="scolumn">		
+				<table>
+				<tr>
+					<td><label for="fEnv">Environment</label></td>
+					<td><label for="fBG">Business Group</label></td>
+				</tr>
+				<tr>
+					<td>
+						<select name="fEnv" id="fEnv">
+							<option></option>
+						  #[%dw 2.0
+		output application/java
+		---
+		payload.env.data map ((item, index) -> if(payload.previous.fEnv == item.name) "<option value=" ++ item.name ++ " selected='selected'>" ++ item.name ++ "</option>"
+								else 
+									"<option value=" ++ item.name ++ ">" ++ item.name ++ "</option>"
+		) joinBy  ("")
+		
+		]			  
+						</select>				
+					</td>
+					<td>
+						<select name="fBG" id="fBG">
+							<option></option>
+						  #[%dw 2.0
+		output application/java
+		---
+		payload.bg.BG map ((item, index) -> if(payload.previous.fBG == item.BG_Name) "<option value=" ++ item.BG_Name ++ " selected='selected'>" ++ item.BG_Name ++ "</option>"
+											else 
+												"<option value=" ++ item.BG_Name ++ ">" ++ item.BG_Name ++ "</option>" 
+		) joinBy  ("")]	
+						</select>				
+					</td>
+					<input type="hidden" id="Authorization" name="Authorization" value=#[vars.AuthorizationToken]>
+			</input>
+			<input type="hidden" id="org_id" name="OrganizationID" value=#[vars.orgId]>
+			</input>
+					<td><input type="submit" value="Submit"></td>			
+				</tr>
+				
+				</table>
+			</div>
+			
+			<div class="scolumn">
+			<table>
+			<tr>
+			<tr>
+				<td><label for="displayBG">BG</label></td>
+				<td><label for="Env">Env</label></td>
+				<td><label for="allocatedVCores">Allocated</label></td>
+				<td><label for="usedVCores">Used</label></td>				 
+			</tr>
+			</tr>
+			#[%dw 2.0
+	output application/java
+	---
+	(payload.bg.BG map ((item, index) ->
+	 "<tr><td><label for='displayBG'>" ++ item.BG_Name ++ "</label></td>" ++ "\n" ++								
+	 			"<td><label for='Env'>" ++  "Production" ++ "</label></td>" ++ "\n" ++
+	 			"<td><label for='allocatedVCores'>" ++ item.Production_assinged ++ "</label></td>" ++ "\n" ++
+				"<td><label for='usedVCores'>" ++ item.production_consumed.productionVCoresConsumed ++ "</label></td>"++ "\n" ++ "</tr>" ++ 
+				
+	"<tr><td><label for='displayBG'>" ++ item.BG_Name ++ "</label></td>" ++ "\n" ++		
+				"<td><label for='Env'>" ++ "Sandbox" ++ "</label></td>" ++ "\n" ++
+				"<td><label for='allocatedVCores'>" ++ item.Sandbox_assinged ++ "</label></td>"++ "\n" ++
+				"<td><label for='usedVCores'>" ++ item.Sandbox_consumed ++ "</label></td>"++ "\n" ++ "</tr>" ++ 
+				
+	"<tr><td><label for='displayBG'>" ++ item.BG_Name ++ "</label></td>" ++ "\n" ++		
+				"<td><label for='Env'>" ++ "Design" ++ "</label></td>" ++ "\n" ++
+				"<td><label for='allocatedVCores'>" ++ item.Design_consumed ++ "</label></td>"++ "\n" ++
+				"<td><label for='usedVCores'>" ++ item.Design_consumed ++ "</label></td>"++ "\n" ++ "</tr>"
+				   				
+
+
+				))]
+				</tr>			
+			</table>
+			</div>
+		
+		</div>
+		<div class="row">
+			<div class="column">		
+				<table>
+				<tr>
+					<td><label for="applicationName">Application Name</label></td>
+					<td><label for="memory">Memory</label></td>
+					<td><label for="cpu">Worker</label></td>					
+					<td><label for="noofworkers">No Of workers</label></td>					
+					<td><label for="muleVersion">Mule Ver.</label></td>
+					<td><label for="region">Region</label></td>
+					<td><label for="staticIPsEnabled">staticIPsEnabled</label></td>
+					<td><label for="ApplicationLastUsed">Application Last Used</label></td>
+					<td><label for="Owner">Owner</label></td>
+				</tr>
+							</tr>
+			#[%dw 2.0
+	output application/java
+	---
+	(payload.appDetails map ((item, index) ->
+	 "<tr><td><label for='applicationName'>" ++ item.applicationName ++ "</label></td>" ++ "\n" ++								
+	 			"<td><label for='memory'>" ++  item.memory ++ "</label></td>" ++ "\n" ++
+	 			"<td><label for='cpu'>" ++ item.cpu ++ "</label></td>" ++ "\n" ++
+				"<td><label for='noofworkers'>" ++ item.noofworkers ++ "</label></td>" ++ "\n" ++				
+				"<td><label for='muleVersion'>" ++ item.muleVersion ++ "</label></td>" ++ "\n" ++
+				"<td><label for='region'>" ++ item.region ++ "</label></td>" ++ "\n" ++
+				"<td><label for='staticIPsEnabled'>" ++ item.staticIPsEnabled ++ "</label></td>"++ "\n" ++ "</tr>" 
+				))]
+				</tr>							
+				</table>
+			</div>
+		</div>		
+</form>
+	</body>
+</html>

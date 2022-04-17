@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body {font-family: Arial, Helvetica, sans-serif;}
+* {box-sizing: border-box;}
+
+input[id=Authorization], select, textarea {
+  width: 100%;
+  padding: 15px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-sizing: border-box;
+  margin-top: 6px;
+  margin-bottom: 16px;
+  resize: vertical;
+}
+
+input[type=submit] {
+  background-color: #04AA6D;
+  color: white;
+  padding: 12px 20px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+input[type=submit]:hover {
+  background-color: #45a049;
+}
+.check{
+  left: 50% !important;
+  right: auto !important;
+  text-align: center !important;
+ 
+  }
+option{
+	padding: 10px;
+}
+ 
+.container {
+  border-radius: 5px;
+  background-color: #f2f2f2;
+  padding: 30px;
+  width: 50%;
+  position: absolute;
+  top:20%;
+	
+	left: 0;
+	right: 0;
+  	
+	margin: auto;
+}
+</style>
+</head>
+<body class="check">
+
+<h1 style= "border-bottom-style: solid; padding: 20px">Mulesoft Advanced Application Specifics</h1>
+
+<div class="container">
+  <form name = "myform" method="post" action="">
+    
+
+    <label for="Environment">Environment</label>
+    
+    <select id="env" name="env">
+   
+      <option></option>
+      #[%dw 2.0
+output application/java
+var sam=["dev","prod"]
+---
+sam map ((item, index) -> "<option value='uat'>" ++ item ++ "</option>") joinBy  ("")]
+
+      
+    </select>
+    
+    <label for="Business_Group">Business Group</label>
+    <select id="Business_Group" name="Business_Group">
+      <option></option>
+      <option value="DS_TS">DS_TS</option>
+      <option value="DS_Retail_GCC">DS_Retail_GCC</option>
+      <option value="Global_Function">Global_Function</option>
+      <option value="ITSO">ITSO</option>
+      <option value="UpStream">UpStream</option>
+      <option value="B.V">Master(B.V)</option>
+      <option value="P&T">P&T</option>
+    </select>
+    
+    <label for="Server">Server</label>
+    <select id="server" name="server" onchange="serverchange(value)">
+      <option></option>
+      <option value="/mule-advanced-application-v1/cloud-details">CLOUDHUB</option>
+      <option value="/mule-advanced-application-v1/rtf-details">RTF</option>
+      <option value="/mule-advanced-application-v1/details">BOTH</option>
+    </select>
+	
+	
+   
+    <input type="hidden" id="Authorizations" name="Authorizations" value=#[vars.Auth]>
+    </input>
+    <input type="submit" value="Submit">
+  </form>
+</div>
+<script type="text/javascript">
+function serverchange(val)
+{
+   document.myform.action = val;
+  }
+</script>
+
+
+</body>
+</html>
