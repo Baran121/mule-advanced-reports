@@ -188,7 +188,7 @@ payload.payload map
 		</http:request>
 				<parallel-foreach doc:name="Parallel For Each" doc:id="fef97bfc-f73d-4270-9ba9-c006aeef4aee" collection="#[vars.applications.data]">
 			<try doc:name="Try" doc:id="632a22b3-21c3-4c09-9a90-33dd57204894" >
-						<http:request method="GET" doc:name="Request" doc:id="1f4f75ac-5478-45ec-b06d-355683789ada" config-ref="Anypoint_HTTP_Request_configuration" path='#["/monitoring/api/visualizer/api/datasources/proxy/" ++ (vars.proxyDetails.proxies[?($.name == "influxdb")])[0].id  ++ "/query?db=%22dias_ryldurch_prod%22&amp;q=SELECT%20mean(%22avg_response_time%22)%20FROM%20%22app_outbound_metric%22%20WHERE%20(%22org_id%22%20%3D%20%27" ++ vars.orgId ++ "%27%20AND%20%22env_id%22%20%3D%20%27" ++ vars.currentValues.Env_id ++ "%27%20AND%20%22app_id%22%20%3D%20%27"++ payload.artifact.name ++ "%27)%20AND%20time%20%3E%3D%20now()%20-%20365d%20GROUP%20BY%20time(1h)%2C%20%22app_id%22%20fill(none)&amp;epoch=ms"]' responseTimeout="120000">
+						<http:request method="GET" doc:name="Request" doc:id="1f4f75ac-5478-45ec-b06d-355683789ada" config-ref="Anypoint_HTTP_Request_configuration" path='#["/monitoring/api/visualizer/api/datasources/proxy/" ++ (vars.proxyDetails.proxies[?($.name == "influxdb")])[0].id  ++ "/query?db=%22dias_mt_7_prod%22&amp;q=SELECT%20mean(%22avg_response_time%22)%20FROM%20%22app_outbound_metric%22%20WHERE%20(%22org_id%22%20%3D%20%27" ++ vars.orgId ++ "%27%20AND%20%22env_id%22%20%3D%20%27" ++ vars.currentValues.Env_id ++ "%27%20AND%20%22app_id%22%20%3D%20%27"++ payload.artifact.name ++ "%27)%20AND%20time%20%3E%3D%20now()%20-%20365d%20GROUP%20BY%20time(1h)%2C%20%22app_id%22%20fill(none)&amp;epoch=ms"]' responseTimeout="120000">
 				<http:headers><![CDATA[#[output application/java
 ---
 {
