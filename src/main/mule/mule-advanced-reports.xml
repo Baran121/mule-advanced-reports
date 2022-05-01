@@ -12,7 +12,7 @@ http://www.mulesoft.org/schema/mule/secure-properties http://www.mulesoft.org/sc
 		<http:listener-connection host="0.0.0.0" port="${http.port}" />
 	</http:listener-config>
 	<http:request-config name="Anypoint_HTTP_Request_configuration" doc:name="HTTP Request configuration" doc:id="d6d09ae6-2461-4c3f-9872-6c8d5cb22b07" enableCookies="false">
-		<http:request-connection protocol="HTTPS" host="anypoint.mulesoft.com" />
+		<http:request-connection protocol="HTTPS" host="anypoint.mulesoft.com" port="443"/>
 	</http:request-config>
 	<secure-properties:config name="Secure_Properties_Config" doc:name="Secure Properties Config" doc:id="734a5769-8a88-4434-a225-2c1bf412f7f9" file="dev.yaml" key="0123456789012345" >
 		<secure-properties:encrypt algorithm="Blowfish" />
@@ -53,15 +53,15 @@ output application/json
 }]]]></http:headers>
 				</http:request>
 				<set-variable value="#[[]]" doc:name="Set Variable" doc:id="962007e5-be26-44a2-8519-9412f05f81f1" variableName="usageInfo" />
-				<foreach doc:name="For Each Business Group" doc:id="72febc9f-88a0-4f68-82bd-0e4d4e2f2d59" collection="#[payload.subOrganizations]">
-							<http:request method="GET" doc:name="usage-Request" doc:id="263420f3-874c-4905-8ee2-5bea95fe4ad5" config-ref="Anypoint_HTTP_Request_configuration" path='#["/accounts/api/cs/organizations/"++ payload.id ++ "/usage"]' target="usage">
+						<foreach doc:name="For Each" doc:id="277fc8bf-1a60-43f7-b9ad-38197a02181d" collection="#[payload.subOrganizations]">
+			<http:request method="GET" doc:name="usage-Request" doc:id="263420f3-874c-4905-8ee2-5bea95fe4ad5" config-ref="Anypoint_HTTP_Request_configuration" path='#["/accounts/api/cs/organizations/"++ payload.id ++ "/usage"]' target="usage">
 								<http:headers><![CDATA[#[output application/java
 ---
 {
 	Authorization  : vars.AuthorizationToken
 }]]]></http:headers>
 							</http:request>
-							<ee:transform doc:name="Transform Message" doc:id="8a41d6b9-6da5-4c79-9ae9-fe2e52e08926">
+			<ee:transform doc:name="Transform Message" doc:id="8a41d6b9-6da5-4c79-9ae9-fe2e52e08926">
 								<ee:message>
 									<ee:set-payload><![CDATA[%dw 2.0
 output application/json
@@ -78,7 +78,7 @@ output application/json
 ]]></ee:set-payload>
 								</ee:message>
 							</ee:transform>
-							<ee:transform doc:name="Concantinate Usage Response" doc:id="0687387e-52f2-4429-ac29-42aa3f1a1e14">
+			<ee:transform doc:name="Concantinate Usage Response" doc:id="0687387e-52f2-4429-ac29-42aa3f1a1e14">
 								<ee:message>
 								</ee:message>
 								<ee:variables>
@@ -90,8 +90,8 @@ vars.usageInfo + payload
 ]]></ee:set-variable>
 								</ee:variables>
 							</ee:transform>
-						</foreach>
-						<ee:transform doc:name="" doc:id="1ee818b3-7574-4a81-ab30-62e0acc3a35b">
+		</foreach>
+		<ee:transform doc:name="" doc:id="1ee818b3-7574-4a81-ab30-62e0acc3a35b">
 							<ee:message>
 								<ee:set-payload><![CDATA[%dw 2.0
 output application/json
@@ -105,7 +105,7 @@ output application/json
 	</flow>
 	<flow name="mule-advanced-reportsFlow" doc:id="b44162fd-0719-4533-95a0-2741737a4c6f" >
 		<http:listener doc:name="Listener" doc:id="1e84a2a8-5235-4794-9945-610e2b5ffb29" config-ref="HTTP_Listener_config" path="/home"/>
-		<flow-ref doc:name="Flow Reference" doc:id="8aefb49e-a158-482d-9c88-4ff0c57ad526" name="get-essential-details" />
+		<flow-ref doc:name="get-essential-details" doc:id="8aefb49e-a158-482d-9c88-4ff0c57ad526" name="get-essential-details" />
 		<flow-ref doc:name="get vcores-update-flow" doc:id="06cb85bd-f6cb-4d2e-b002-afd550345bcd" name="update-vcores-flow" target="vCoreDetails"/>
 		<choice doc:name="Choice" doc:id="3168ef3c-2d71-441e-8d34-be6f19be35e2" >
 			<when expression="#[payload != null and not (isEmpty(payload))]">
@@ -179,6 +179,25 @@ payload.payload map
 }]]></ee:set-variable>
 					</ee:variables>
 				</ee:transform>
+				<http:request method="GET" doc:name="Sync_Request" doc:id="18cc60b6-13b4-49a2-b020-dc94c6271b9b" config-ref="Anypoint_HTTP_Request_configuration" path="/monitoring/api/sync" target="proxyDetails">
+			<http:headers><![CDATA[#[output application/java
+---
+{
+	"Authorization" :  vars.AuthorizationToken
+}]]]></http:headers>
+		</http:request>
+				<parallel-foreach doc:name="Parallel For Each" doc:id="fef97bfc-f73d-4270-9ba9-c006aeef4aee" collection="#[vars.applications.data]">
+			<try doc:name="Try" doc:id="632a22b3-21c3-4c09-9a90-33dd57204894" >
+						<http:request method="GET" doc:name="Request" doc:id="1f4f75ac-5478-45ec-b06d-355683789ada" config-ref="Anypoint_HTTP_Request_configuration" path='#["/monitoring/api/visualizer/api/datasources/proxy/" ++ (vars.proxyDetails.proxies[?($.name == "influxdb")])[0].id  ++ "/query?db=%22dias_ryldurch_prod%22&amp;q=SELECT%20mean(%22avg_response_time%22)%20FROM%20%22app_outbound_metric%22%20WHERE%20(%22org_id%22%20%3D%20%27" ++ vars.orgId ++ "%27%20AND%20%22env_id%22%20%3D%20%27" ++ vars.currentValues.Env_id ++ "%27%20AND%20%22app_id%22%20%3D%20%27"++ payload.artifact.name ++ "%27)%20AND%20time%20%3E%3D%20now()%20-%20365d%20GROUP%20BY%20time(1h)%2C%20%22app_id%22%20fill(none)&amp;epoch=ms"]' responseTimeout="120000">
+				<http:headers><![CDATA[#[output application/java
+---
+{
+	Authorization :  vars.AuthorizationToken
+}]]]></http:headers>
+			</http:request>
+						<logger level="INFO" doc:name="Logger" doc:id="15db7696-390f-469c-8c73-6262ebea2655" />
+					</try>
+		</parallel-foreach>
 				<logger level="INFO" doc:name="Logger" doc:id="cff8310b-5440-49cd-b655-c8360eac8417" />
 			</when>
 		</choice>
