@@ -18,7 +18,185 @@ http://www.mulesoft.org/schema/mule/secure-properties http://www.mulesoft.org/sc
 		<secure-properties:encrypt algorithm="Blowfish" />
 	</secure-properties:config>
 	<configuration-properties doc:name="Configuration properties" doc:id="9c8de1ec-809d-465d-8b2c-491af5e78e6e" file="dev.yaml" />
-	<flow name="get-essential-details" doc:id="a9c0c064-c5be-445c-a17c-0cab229c6ae2" >
+	<flow name="mule-advanced-reportsFlow" doc:id="b44162fd-0719-4533-95a0-2741737a4c6f">
+		<http:listener doc:name="Listener" doc:id="1e84a2a8-5235-4794-9945-610e2b5ffb29" config-ref="HTTP_Listener_config" path="/home" />
+		<flow-ref doc:name="get-essential-details" doc:id="8aefb49e-a158-482d-9c88-4ff0c57ad526" name="get-essential-details-flow" />
+		<flow-ref doc:name="get vcores-update-flow" doc:id="06cb85bd-f6cb-4d2e-b002-afd550345bcd" name="update-vcores-flow" target="vCoreDetails" />
+		<choice doc:name="Choice" doc:id="3168ef3c-2d71-441e-8d34-be6f19be35e2">
+			<when expression="#[payload != null and not (isEmpty(payload))]">
+				<ee:transform doc:name="Transform Message" doc:id="e467aed5-c440-40a5-ae86-9d86e9172a2b">
+					<ee:message>
+						<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+					</ee:message>
+					<ee:variables>
+						<ee:set-variable variableName="_environment"><![CDATA[%dw 2.0
+output application/json
+---
+payload.fEnv]]></ee:set-variable>
+						<ee:set-variable variableName="_BG"><![CDATA[%dw 2.0
+output application/json
+---
+payload.fBG]]></ee:set-variable>
+					</ee:variables>
+				</ee:transform>
+				<http:request method="GET" doc:name="fetch current orgId Request" doc:id="f375c9bb-d5f1-4b76-968b-df3f37532d77" config-ref="Anypoint_HTTP_Request_configuration" path="/accounts/api/me" target="currentOrg">
+					<http:headers><![CDATA[#[output application/java
+---
+{
+	Authorization : vars.AuthorizationToken
+}]]]></http:headers>
+				</http:request>
+				<ee:transform doc:name="set environments" doc:id="85196d33-903b-468f-9bbc-86fef2448ccb">
+					<ee:message>
+					</ee:message>
+					<ee:variables>
+						<ee:set-variable variableName="currentValues"><![CDATA[%dw 2.0
+output application/json
+---
+((vars.environments.data filter $.name == payload.fEnv) map{
+    "Env_id":$.id,
+    "organization_Id": $.organizationId
+})reduce ($++$$)]]></ee:set-variable>
+					</ee:variables>
+				</ee:transform>
+				<http:request method="GET" doc:name="get applications" doc:id="37458b5d-faa1-442e-aa0e-456fd7462b8e" config-ref="Anypoint_HTTP_Request_configuration" path="/armui/api/v1/applications" target="applications">
+					<http:headers><![CDATA[#[output application/java
+---
+{
+	"X-ANYPNT-ORG-ID" : vars.currentValues.Ord_id,
+	"X-ANYPNT-ENV-ID":	vars.currentValues.Env_id,
+	"Authorization": vars.AuthorizationToken
+}]]]></http:headers>
+				</http:request>
+				<parallel-foreach doc:name="Parallel For Each" doc:id="13f847b0-7e06-4173-8fd2-acda18377478" collection="#[vars.applications.data]" maxConcurrency="4">
+					<http:request method="GET" doc:name="get each Application Details" doc:id="28b5d8f4-7bee-4e7c-8665-bd68c5657761" config-ref="Anypoint_HTTP_Request_configuration" path='#["cloudhub/api/v2/applications/" ++ payload.id]' responseTimeout="120000">
+						<http:headers><![CDATA[#[output application/java
+---
+{
+	"Authorization" :  vars.AuthorizationToken,
+	"X-ANYPNT-ORG-ID": vars.currentValues.orgId,
+	"X-ANYPNT-ENV-ID": vars.currentValues.Env_id
+}]]]></http:headers>
+					</http:request>
+				</parallel-foreach>
+				<ee:transform doc:name="Collect the parallel foreach results" doc:id="3c19a208-c07d-490c-a457-dbe12592f8d0">
+					<ee:message />
+					<ee:variables>
+						<ee:set-variable variableName="appDetails"><![CDATA[%dw 2.0
+output application/json
+---
+payload.payload map 
+{
+    "applicationName": $.fullDomain,
+    "memory": $.workers[0].memory,
+    "cpu": $.workers[0].cpu,
+    "noofworkers" : $.workers.amount,
+    "remainingOrgWorkers" : $.workers.remainingOrgWorkers,
+    "muleVersion": $.muleVersion.version,
+    "region" : $.region,
+    "staticIPsEnabled": $.staticIPsEnabled
+}]]></ee:set-variable>
+					</ee:variables>
+				</ee:transform>
+				<http:request method="GET" doc:name="Sync_Request" doc:id="18cc60b6-13b4-49a2-b020-dc94c6271b9b" config-ref="Anypoint_HTTP_Request_configuration" path="/monitoring/api/sync" target="proxyDetails">
+			<http:headers><![CDATA[#[output application/java
+---
+{
+	"Authorization" :  vars.AuthorizationToken
+}]]]></http:headers>
+		</http:request>
+				<flow-ref doc:name="get-App-Usage-flow" doc:id="9a75b545-6d97-4e7d-b145-bb64d8330417" name="get-App-Usage-flow" />
+				<ee:transform doc:name="Enriched App Details" doc:id="decb7499-32c0-4734-a817-53ea3c69c8c4">
+					<ee:message>
+					</ee:message>
+					<ee:variables>
+						<ee:set-variable variableName="updatedAppDetails"><![CDATA[%dw 2.0
+output application/json
+---
+vars.appDetails map (item, index) -> ( 
+{
+    "applicationName": item.applicationName,
+    "memory": item.memory,
+    "cpu": item.cpu,
+    "noofworkers" : item.noofworkers,
+    "remainingOrgWorkers" : item.remainingOrgWorkers,
+    "muleVersion": item.muleVersion,
+    "region" : item.region,
+    "staticIPsEnabled": item.staticIPsEnabled,
+    "lastUsed": if(vars.usageDetails[?((item.applicationName) == $.name )].lastAccess[0] != null) vars.usageDetails[?((item.applicationName) == $.name )].lastAccess[0] else ""
+        })]]></ee:set-variable>
+					</ee:variables>
+				</ee:transform>
+			</when>
+		</choice>
+		<ee:transform doc:name="final Transformation before parse to html" doc:id="8e98b3a4-27e0-4234-b267-cecad3f1b865">
+					<ee:message>
+						<ee:set-payload><![CDATA[%dw 2.0
+output application/json skipNullOn="everywhere"
+---
+{
+	env: vars.environments,
+	bg: vars.vCoreDetails,
+	appDetails: vars.updatedAppDetails,
+	previous: {
+		fEnv: vars."_environment",
+		fBG: vars."_BG"
+	}
+}]]></ee:set-payload>
+					</ee:message>
+			<ee:variables />
+				</ee:transform>
+		<parse-template doc:name="Parse Template" doc:id="9eb12fd8-d5ff-4462-a078-3ca3a955d11f" location="view/updateme.html" />
+	</flow>
+	<flow name="get-App-Usage-flow" doc:id="49e83e1b-6c70-4f68-805b-74e611762809" >
+		<parallel-foreach doc:name="Parallel For Each" doc:id="fef97bfc-f73d-4270-9ba9-c006aeef4aee" collection="#[vars.appDetails]">
+			<try doc:name="Try" doc:id="632a22b3-21c3-4c09-9a90-33dd57204894">
+						<ee:transform doc:name="set path" doc:id="82189404-6a8b-484f-b7e5-9f5b0f1d30fd">
+							<ee:message>
+							</ee:message>
+							<ee:variables>
+								<ee:set-variable variableName="path"><![CDATA[%dw 2.0
+output application/java
+---
+"/monitoring/api/visualizer/api/datasources/proxy/" ++ (vars.proxyDetails.proxies[?($.name == 'influxdb')])[0].id  ++ "/query?db=%22dias_mt_7_prod%22&q=SELECT%20sum(%22avg_request_count%22)%20FROM%20%22app_inbound_metric%22%20WHERE%20(%22org_id%22%20%3D%20%27" ++ vars.currentValues.organization_Id ++ "%27%20AND%20%22env_id%22%20%3D%20%27" ++ vars.currentValues.Env_id ++ "%27%20AND%20%22app_id%22%20%3D%20%27"++ payload.applicationName ++ "%27)%20AND%20time%20%3E%3D%20now()%20-%20365d%20GROUP%20BY%20time(1h)%2C%20%22app_id%22%20fill(none)&epoch=ms"]]></ee:set-variable>
+							</ee:variables>
+						</ee:transform>
+						<http:request method="GET" doc:name="Request" doc:id="1f4f75ac-5478-45ec-b06d-355683789ada" config-ref="Anypoint_HTTP_Request_configuration" path="#[vars.path]" responseTimeout="120000">
+				<http:headers><![CDATA[#[output application/java
+---
+{
+	Authorization :  vars.AuthorizationToken
+}]]]></http:headers>
+			</http:request>
+						<logger level="INFO" doc:name="Logger" doc:id="15db7696-390f-469c-8c73-6262ebea2655" />
+						<error-handler>
+							<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="b9a9a43a-518a-4490-aaaa-59891f4499a2" type="ANY">
+								<logger level="INFO" doc:name="Logger" doc:id="b652702a-1f5d-42af-8daf-327261e5f168" message="Error getting API last access" />
+							</on-error-continue>
+						</error-handler>
+					</try>
+		</parallel-foreach>
+		<ee:transform doc:name="Collect the parallel foreach results" doc:id="1df01db5-6b78-4f28-8382-86cd6cb9bb65">
+						<ee:message />
+						<ee:variables>
+						<ee:set-variable variableName="usageDetails"><![CDATA[%dw 2.0
+output application/json
+---
+payload.payload.*results map(series, sIndex)->( {
+     (series.series map(app, aIndex)-> (
+        {
+            "name": app.tags.app_id[0],
+            "lastAccess": app.values[0][0][0] as DateTime { unit: "milliseconds" } as String default "NA"
+        }
+    ))
+})]]></ee:set-variable>
+						</ee:variables>
+					</ee:transform>
+	</flow>
+	<flow name="get-essential-details-flow" doc:id="a9c0c064-c5be-445c-a17c-0cab229c6ae2" >
 		<http:request method="POST" doc:name="login Request" doc:id="e335b422-3747-46a2-bd45-1dc7617441fe" config-ref="Anypoint_HTTP_Request_configuration" path="/accounts/login" targetValue='#["Bearer " ++ payload.access_token]' target="AuthorizationToken">
 					<http:body><![CDATA[#[%dw 2.0
 output application/json
@@ -52,7 +230,7 @@ output application/json
 	Authorization : vars.AuthorizationToken
 }]]]></http:headers>
 				</http:request>
-				<set-variable value="#[[]]" doc:name="Set Variable" doc:id="962007e5-be26-44a2-8519-9412f05f81f1" variableName="usageInfo" />
+				<set-variable value="#[[]]" doc:name="Set usageInfo" doc:id="962007e5-be26-44a2-8519-9412f05f81f1" variableName="usageInfo" />
 						<foreach doc:name="For Each" doc:id="277fc8bf-1a60-43f7-b9ad-38197a02181d" collection="#[payload.subOrganizations]">
 			<http:request method="GET" doc:name="usage-Request" doc:id="263420f3-874c-4905-8ee2-5bea95fe4ad5" config-ref="Anypoint_HTTP_Request_configuration" path='#["/accounts/api/cs/organizations/"++ payload.id ++ "/usage"]' target="usage">
 								<http:headers><![CDATA[#[output application/java
@@ -102,121 +280,5 @@ output application/json
 							</ee:message>
 						</ee:transform>
 		
-	</flow>
-	<flow name="mule-advanced-reportsFlow" doc:id="b44162fd-0719-4533-95a0-2741737a4c6f" >
-		<http:listener doc:name="Listener" doc:id="1e84a2a8-5235-4794-9945-610e2b5ffb29" config-ref="HTTP_Listener_config" path="/home"/>
-		<flow-ref doc:name="get-essential-details" doc:id="8aefb49e-a158-482d-9c88-4ff0c57ad526" name="get-essential-details" />
-		<flow-ref doc:name="get vcores-update-flow" doc:id="06cb85bd-f6cb-4d2e-b002-afd550345bcd" name="update-vcores-flow" target="vCoreDetails"/>
-		<choice doc:name="Choice" doc:id="3168ef3c-2d71-441e-8d34-be6f19be35e2" >
-			<when expression="#[payload != null and not (isEmpty(payload))]">
-				<ee:transform doc:name="Transform Message" doc:id="e467aed5-c440-40a5-ae86-9d86e9172a2b">
-					<ee:message>
-						<ee:set-payload><![CDATA[%dw 2.0
-output application/json
----
-payload]]></ee:set-payload>
-					</ee:message>
-					<ee:variables >
-						<ee:set-variable variableName="_environment" ><![CDATA[%dw 2.0
-output application/json
----
-payload.fEnv]]></ee:set-variable>
-						<ee:set-variable variableName="_BG" ><![CDATA[%dw 2.0
-output application/json
----
-payload.fBG]]></ee:set-variable>
-					</ee:variables>
-				</ee:transform>
-				<ee:transform doc:name="set environments" doc:id="85196d33-903b-468f-9bbc-86fef2448ccb" >
-					<ee:message >
-					</ee:message>
-					<ee:variables >
-						<ee:set-variable variableName="currentValues" ><![CDATA[%dw 2.0
-output application/json
----
-((vars.environments.data filter $.name == payload.fEnv) map{
-    "Env_id":$.id,
-    "organization_Id": $.organizationId
-})reduce ($++$$)]]></ee:set-variable>
-					</ee:variables>
-				</ee:transform>
-				<http:request method="GET" doc:name="get applications" doc:id="37458b5d-faa1-442e-aa0e-456fd7462b8e" config-ref="Anypoint_HTTP_Request_configuration" path="/armui/api/v1/applications" target="applications">
-					<http:headers ><![CDATA[#[output application/java
----
-{
-	"X-ANYPNT-ORG-ID" : vars.currentValues.Ord_id,
-	"X-ANYPNT-ENV-ID":	vars.currentValues.Env_id,
-	"Authorization": vars.AuthorizationToken
-}]]]></http:headers>
-				</http:request>
-				<parallel-foreach doc:name="Parallel For Each" doc:id="13f847b0-7e06-4173-8fd2-acda18377478" collection="#[vars.applications.data]" maxConcurrency="4">
-					<http:request method="GET" doc:name="get each Application Details" doc:id="28b5d8f4-7bee-4e7c-8665-bd68c5657761" config-ref="Anypoint_HTTP_Request_configuration" path='#["cloudhub/api/v2/applications/" ++ payload.id]' responseTimeout="120000" >
-						<http:headers ><![CDATA[#[output application/java
----
-{
-	"Authorization" :  vars.AuthorizationToken,
-	"X-ANYPNT-ORG-ID": vars.currentValues.orgId,
-	"X-ANYPNT-ENV-ID": vars.currentValues.Env_id
-}]]]></http:headers>
-					</http:request>
-				</parallel-foreach>
-				<ee:transform doc:name="Collect the parallel foreach results" doc:id="3c19a208-c07d-490c-a457-dbe12592f8d0">
-					<ee:message />
-					<ee:variables>
-						<ee:set-variable variableName="appDetails" ><![CDATA[%dw 2.0
-output application/json
----
-payload.payload map 
-{
-    "applicationName": $.domain,
-    "memory": $.workers[0].memory,
-    "cpu": $.workers[0].cpu,
-    "noofworkers" : $.workers.amount,
-    "remainingOrgWorkers" : $.workers.remainingOrgWorkers,
-    "muleVersion": $.muleVersion.version,
-    "region" : $.region,
-    "staticIPsEnabled": $.staticIPsEnabled
-}]]></ee:set-variable>
-					</ee:variables>
-				</ee:transform>
-				<http:request method="GET" doc:name="Sync_Request" doc:id="18cc60b6-13b4-49a2-b020-dc94c6271b9b" config-ref="Anypoint_HTTP_Request_configuration" path="/monitoring/api/sync" target="proxyDetails">
-			<http:headers><![CDATA[#[output application/java
----
-{
-	"Authorization" :  vars.AuthorizationToken
-}]]]></http:headers>
-		</http:request>
-				<parallel-foreach doc:name="Parallel For Each" doc:id="fef97bfc-f73d-4270-9ba9-c006aeef4aee" collection="#[vars.applications.data]">
-			<try doc:name="Try" doc:id="632a22b3-21c3-4c09-9a90-33dd57204894" >
-						<http:request method="GET" doc:name="Request" doc:id="1f4f75ac-5478-45ec-b06d-355683789ada" config-ref="Anypoint_HTTP_Request_configuration" path='#["/monitoring/api/visualizer/api/datasources/proxy/" ++ (vars.proxyDetails.proxies[?($.name == "influxdb")])[0].id  ++ "/query?db=%22dias_mt_7_prod%22&amp;q=SELECT%20mean(%22avg_response_time%22)%20FROM%20%22app_outbound_metric%22%20WHERE%20(%22org_id%22%20%3D%20%27" ++ vars.orgId ++ "%27%20AND%20%22env_id%22%20%3D%20%27" ++ vars.currentValues.Env_id ++ "%27%20AND%20%22app_id%22%20%3D%20%27"++ payload.artifact.name ++ "%27)%20AND%20time%20%3E%3D%20now()%20-%20365d%20GROUP%20BY%20time(1h)%2C%20%22app_id%22%20fill(none)&amp;epoch=ms"]' responseTimeout="120000">
-				<http:headers><![CDATA[#[output application/java
----
-{
-	Authorization :  vars.AuthorizationToken
-}]]]></http:headers>
-			</http:request>
-						<logger level="INFO" doc:name="Logger" doc:id="15db7696-390f-469c-8c73-6262ebea2655" />
-					</try>
-		</parallel-foreach>
-				<logger level="INFO" doc:name="Logger" doc:id="cff8310b-5440-49cd-b655-c8360eac8417" />
-			</when>
-		</choice>
-		<ee:transform doc:name="Transform Message" doc:id="8e98b3a4-27e0-4234-b267-cecad3f1b865">
-					<ee:message>
-						<ee:set-payload><![CDATA[%dw 2.0
-output application/json skipNullOn="everywhere"
----
-{
-	env: vars.environments,
-	bg: vars.vCoreDetails,
-	appDetails: vars.appDetails,
-	previous: {
-		fEnv: vars."_environment",
-		fBG: vars."_BG"
-	}
-}]]></ee:set-payload>
-					</ee:message>
-				</ee:transform>
-		<parse-template doc:name="Parse Template" doc:id="9eb12fd8-d5ff-4462-a078-3ca3a955d11f" location="view/updateme.html"/>
 	</flow>
 </mule>

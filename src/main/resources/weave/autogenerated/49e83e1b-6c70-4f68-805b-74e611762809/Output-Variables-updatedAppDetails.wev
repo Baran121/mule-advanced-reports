@@ -1,0 +1,4 @@
+%dw 2.0
+
+type auto_49e83e1b_6c70_4f68_805b_74e611762809_Output_Variables_updatedAppDetails = Array<{|  applicationName: Any,   memory: Any,   cpu: Any,   noofworkers: Any,   remainingOrgWorkers: Any,   muleVersion: Any,   region: Any,   staticIPsEnabled: Any,   lastUsed: String|}>
+
