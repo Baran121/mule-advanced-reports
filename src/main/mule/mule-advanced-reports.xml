@@ -42,11 +42,21 @@ output application/json
 payload.fBG]]></ee:set-variable>
 					</ee:variables>
 				</ee:transform>
-				<http:request method="GET" doc:name="fetch current orgId Request" doc:id="f375c9bb-d5f1-4b76-968b-df3f37532d77" config-ref="Anypoint_HTTP_Request_configuration" path="/accounts/api/me" target="currentOrg">
+				<ee:transform doc:name="Transform Message" doc:id="6a67b960-7772-46dc-87bc-d6b9390629bb">
+					<ee:message>
+					</ee:message>
+					<ee:variables >
+						<ee:set-variable variableName="orgId" ><![CDATA[%dw 2.0
+output application/java
+---
+vars.vCoreDetails.BG[?($.BG_Name == payload.fBG)][0].orgId default vars.orgId]]></ee:set-variable>
+					</ee:variables>
+				</ee:transform>
+				<http:request method="GET" doc:name="get environments" doc:id="93f72f65-71e6-48bb-a054-ac07fd2c96f3" config-ref="Anypoint_HTTP_Request_configuration" path='#["/accounts/api/organizations/" ++ vars.orgId ++ "/environments"]' target="environments">
 					<http:headers><![CDATA[#[output application/java
 ---
 {
-	Authorization : vars.AuthorizationToken
+	Authorization  : vars.AuthorizationToken
 }]]]></http:headers>
 				</http:request>
 				<ee:transform doc:name="set environments" doc:id="85196d33-903b-468f-9bbc-86fef2448ccb">
@@ -56,18 +66,19 @@ payload.fBG]]></ee:set-variable>
 						<ee:set-variable variableName="currentValues"><![CDATA[%dw 2.0
 output application/json
 ---
-((vars.environments.data filter $.name == payload.fEnv) map{
-    "Env_id":$.id,
-    "organization_Id": $.organizationId
-})reduce ($++$$)]]></ee:set-variable>
+{
+	envId : vars.environments.data[?($.name == payload.fEnv)][0].id,
+	orgId: vars.vCoreDetails.BG[?($.BG_Name == payload.fBG)][0].orgId default vars.orgId
+	
+}]]></ee:set-variable>
 					</ee:variables>
 				</ee:transform>
 				<http:request method="GET" doc:name="get applications" doc:id="37458b5d-faa1-442e-aa0e-456fd7462b8e" config-ref="Anypoint_HTTP_Request_configuration" path="/armui/api/v1/applications" target="applications">
 					<http:headers><![CDATA[#[output application/java
 ---
 {
-	"X-ANYPNT-ORG-ID" : vars.currentValues.Ord_id,
-	"X-ANYPNT-ENV-ID":	vars.currentValues.Env_id,
+	"X-ANYPNT-ORG-ID" : vars.currentValues.orgId,
+	"X-ANYPNT-ENV-ID":	vars.currentValues.envId,
 	"Authorization": vars.AuthorizationToken
 }]]]></http:headers>
 				</http:request>
@@ -78,7 +89,7 @@ output application/json
 {
 	"Authorization" :  vars.AuthorizationToken,
 	"X-ANYPNT-ORG-ID": vars.currentValues.orgId,
-	"X-ANYPNT-ENV-ID": vars.currentValues.Env_id
+	"X-ANYPNT-ENV-ID": vars.currentValues.envId
 }]]]></http:headers>
 					</http:request>
 				</parallel-foreach>
@@ -98,16 +109,9 @@ payload.payload map
     "muleVersion": $.muleVersion.version,
     "region" : $.region,
     "staticIPsEnabled": $.staticIPsEnabled
-}]]></ee:set-variable>
+} default []]]></ee:set-variable>
 					</ee:variables>
 				</ee:transform>
-				<http:request method="GET" doc:name="Sync_Request" doc:id="18cc60b6-13b4-49a2-b020-dc94c6271b9b" config-ref="Anypoint_HTTP_Request_configuration" path="/monitoring/api/sync" target="proxyDetails">
-			<http:headers><![CDATA[#[output application/java
----
-{
-	"Authorization" :  vars.AuthorizationToken
-}]]]></http:headers>
-		</http:request>
 				<flow-ref doc:name="get-App-Usage-flow" doc:id="9a75b545-6d97-4e7d-b145-bb64d8330417" name="get-App-Usage-flow" />
 				<ee:transform doc:name="Enriched App Details" doc:id="decb7499-32c0-4734-a817-53ea3c69c8c4">
 					<ee:message>
@@ -154,14 +158,21 @@ output application/json skipNullOn="everywhere"
 	<flow name="get-App-Usage-flow" doc:id="49e83e1b-6c70-4f68-805b-74e611762809" >
 		<parallel-foreach doc:name="Parallel For Each" doc:id="fef97bfc-f73d-4270-9ba9-c006aeef4aee" collection="#[vars.appDetails]">
 			<try doc:name="Try" doc:id="632a22b3-21c3-4c09-9a90-33dd57204894">
-						<ee:transform doc:name="set path" doc:id="82189404-6a8b-484f-b7e5-9f5b0f1d30fd">
+						<http:request method="GET" doc:name="Sync_Request" doc:id="18cc60b6-13b4-49a2-b020-dc94c6271b9b" config-ref="Anypoint_HTTP_Request_configuration" path="/monitoring/api/sync" target="proxyDetails">
+			<http:headers><![CDATA[#[output application/java
+---
+{
+	"Authorization" :  vars.AuthorizationToken
+}]]]></http:headers>
+		</http:request>
+				<ee:transform doc:name="set path" doc:id="82189404-6a8b-484f-b7e5-9f5b0f1d30fd">
 							<ee:message>
 							</ee:message>
 							<ee:variables>
 								<ee:set-variable variableName="path"><![CDATA[%dw 2.0
 output application/java
 ---
-"/monitoring/api/visualizer/api/datasources/proxy/" ++ (vars.proxyDetails.proxies[?($.name == 'influxdb')])[0].id  ++ "/query?db=%22dias_mt_7_prod%22&q=SELECT%20sum(%22avg_request_count%22)%20FROM%20%22app_inbound_metric%22%20WHERE%20(%22org_id%22%20%3D%20%27" ++ vars.currentValues.organization_Id ++ "%27%20AND%20%22env_id%22%20%3D%20%27" ++ vars.currentValues.Env_id ++ "%27%20AND%20%22app_id%22%20%3D%20%27"++ payload.applicationName ++ "%27)%20AND%20time%20%3E%3D%20now()%20-%20365d%20GROUP%20BY%20time(1h)%2C%20%22app_id%22%20fill(none)&epoch=ms"]]></ee:set-variable>
+"/monitoring/api/visualizer/api/datasources/proxy/" ++ (vars.proxyDetails.proxies[?($.name == 'influxdb')])[0].id  ++ "/query?db=%22dias_mt_7_prod%22&q=SELECT%20sum(%22avg_request_count%22)%20FROM%20%22app_inbound_metric%22%20WHERE%20(%22org_id%22%20%3D%20%27" ++ vars.currentValues.orgId ++ "%27%20AND%20%22env_id%22%20%3D%20%27" ++ vars.currentValues.envId ++ "%27%20AND%20%22app_id%22%20%3D%20%27"++ payload.applicationName ++ "%27)%20AND%20time%20%3E%3D%20now()%20-%20365d%20GROUP%20BY%20time(1h)%2C%20%22app_id%22%20fill(none)&epoch=ms"]]></ee:set-variable>
 							</ee:variables>
 						</ee:transform>
 						<http:request method="GET" doc:name="Request" doc:id="1f4f75ac-5478-45ec-b06d-355683789ada" config-ref="Anypoint_HTTP_Request_configuration" path="#[vars.path]" responseTimeout="120000">
@@ -189,7 +200,10 @@ payload.payload.*results map(series, sIndex)->( {
      (series.series map(app, aIndex)-> (
         {
             "name": app.tags.app_id[0],
-            "lastAccess": app.values[0][0][0] as DateTime { unit: "milliseconds" } as String default "NA"
+            "lastAccess": max((app.values[0] 
+            	map ((value, index) -> 
+            		{ "timeSpans": (value[0]) }
+            	)).timeSpans) as DateTime { unit: "milliseconds" } as String default "NA"
         }
     ))
 })]]></ee:set-variable>
@@ -230,9 +244,36 @@ output application/json
 	Authorization : vars.AuthorizationToken
 }]]]></http:headers>
 				</http:request>
-				<set-variable value="#[[]]" doc:name="Set usageInfo" doc:id="962007e5-be26-44a2-8519-9412f05f81f1" variableName="usageInfo" />
-						<foreach doc:name="For Each" doc:id="277fc8bf-1a60-43f7-b9ad-38197a02181d" collection="#[payload.subOrganizations]">
-			<http:request method="GET" doc:name="usage-Request" doc:id="263420f3-874c-4905-8ee2-5bea95fe4ad5" config-ref="Anypoint_HTTP_Request_configuration" path='#["/accounts/api/cs/organizations/"++ payload.id ++ "/usage"]' target="usage">
+						<ee:transform doc:name="Transform Message" doc:id="858822f6-a018-47ff-8361-1717aa6ec461" >
+			<ee:message >
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="hierarchy" ><![CDATA[%dw 2.0
+var mainOrg = 	[{
+		"bgName":payload.name,
+        orgId: payload.id,
+		"assignedProd":payload.entitlements.vCoresProduction.assigned,
+		"assignedSandBox": payload.entitlements.vCoresSandbox.assigned,
+		"assignedDesign":	payload.entitlements.vCoresDesign.assigned 
+	}]
+
+var subOrgs = 
+	payload.subOrganizations map((value, index) -> {
+		"bgName":	value.name,
+        orgId: value.id,
+		"assignedProd":	value.entitlements.vCoresProduction.assigned,
+		"assignedSandBox": value.entitlements.vCoresSandbox.assigned,
+		"assignedDesign": value.entitlements.vCoresDesign.assigned 
+	}) 
+output application/json
+---
+(mainOrg ++ subOrgs)
+
+]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<parallel-foreach doc:name="Parallel For Each" doc:id="166a9d2e-0fdf-43b5-bfde-8cd1ea6318c1" collection="#[vars.hierarchy]">
+			<http:request method="GET" doc:name="usage-Request" doc:id="263420f3-874c-4905-8ee2-5bea95fe4ad5" config-ref="Anypoint_HTTP_Request_configuration" path='#["/accounts/api/cs/organizations/"++ payload.orgId ++ "/usage"]' target="usage">
 								<http:headers><![CDATA[#[output application/java
 ---
 {
@@ -245,40 +286,32 @@ output application/json
 output application/json
 ---
 {
-	"BG_Name":payload.name,
-	"Production_assinged":payload.entitlements.vCoresProduction.assigned,
-	"production_consumed": vars.usage,
-	"Sandbox_assinged": payload.entitlements.vCoresSandbox.assigned,
+	"BG_Name":payload.bgName,
+	orgId: payload.orgId,
+	"Production_assinged":payload.assignedProd,
+	"production_consumed": vars.usage.productionVCoresConsumed,
+	"Sandbox_assinged": payload.assignedSandBox,
 	"Sandbox_consumed": vars.usage.sandboxVCoresConsumed,
-	"Design_assinged":	payload.entitlements.vCoresDesign.assigned,
+	"Design_assinged":	payload.assignedDesign,
 	"Design_consumed": vars.usage.designVCoresConsumed
 }
 ]]></ee:set-payload>
 								</ee:message>
 							</ee:transform>
-			<ee:transform doc:name="Concantinate Usage Response" doc:id="0687387e-52f2-4429-ac29-42aa3f1a1e14">
+		</parallel-foreach>
+		<ee:transform doc:name="Concantinate Usage Response" doc:id="0687387e-52f2-4429-ac29-42aa3f1a1e14">
 								<ee:message>
-								</ee:message>
-								<ee:variables>
-									<ee:set-variable variableName="usageInfo"><![CDATA[%dw 2.0
-output application/json
----
-vars.usageInfo + payload 
-
-]]></ee:set-variable>
-								</ee:variables>
-							</ee:transform>
-		</foreach>
-		<ee:transform doc:name="" doc:id="1ee818b3-7574-4a81-ab30-62e0acc3a35b">
-							<ee:message>
-								<ee:set-payload><![CDATA[%dw 2.0
+				<ee:set-payload ><![CDATA[%dw 2.0
 output application/json
 ---
 {
-	"BG": vars.usageInfo 
+	BG: payload.payload
 }]]></ee:set-payload>
-							</ee:message>
-						</ee:transform>
+								</ee:message>
+								<ee:variables>
+								</ee:variables>
+							</ee:transform>
+		<logger level="INFO" doc:name="Logger" doc:id="9e88e0af-1b5c-4ccd-9075-edeb08410319" />
 		
 	</flow>
 </mule>

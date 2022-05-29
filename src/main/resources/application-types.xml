@@ -683,4 +683,7 @@ type auto_49e83e1b_6c70_4f68_805b_74e611762809_Output_Variables_applications = A
       </types:output-event>
     </types:processor-declaration>
   </types:enrichment>
+  <types:enrichment select="#858822f6-a018-47ff-8361-1717aa6ec461"/>
+  <types:enrichment select="#0687387e-52f2-4429-ac29-42aa3f1a1e14"/>
+  <types:enrichment select="#6a67b960-7772-46dc-87bc-d6b9390629bb"/>
 </types:mule>
