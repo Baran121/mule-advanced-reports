@@ -1,0 +1,129 @@
+<html>
+<head>
+<style>
+* {
+  box-sizing: border-box; 
+}
+
+.row {
+  margin-left:-5px;
+  margin-right:-5px;
+}
+  
+.column {
+  float: left;
+  width: 50%;
+  padding: 2px;
+  th, td {
+  padding: 15px;
+  text-align: left;
+}
+ 
+ }
+
+table, th, td {
+  border: 1px solid;
+}
+  
+.scolumn {
+  float: left;
+  width: 50%;
+  padding: 2px;
+  width:320px; 
+  height:150px; 
+  overflow:auto;
+}
+ 
+
+tr:nth-child(even) {
+  background-color: #f2f2f2;
+}
+
+
+/* Responsive layout - makes the two columns stack on top of each other instead of next to each other on screens that are smaller than 600 px */
+@media screen and (max-width: 600px) {
+  .column {
+    width: 100%;
+  }
+}
+
+</style>
+</head>
+	<body>
+		<form method="post">
+		<div class="row">
+		  <div class="scolumn">		
+				<table>
+				<tr>
+					<td><label for="fEnv">Environment</label></td>
+					<td><label for="fBG">Business Group</label></td>
+				</tr>
+				<tr>
+					<td>
+						<select name="fEnv" id="fEnv">
+							<option></option>
+						  #[%dw 2.0
+		output application/java
+		---
+		payload.env.data map ((item, index) -> if(payload.previous.fEnv == item.name) "<option value=" ++ item.name ++ " selected='selected'>" ++ item.name ++ "</option>"
+								else 
+									"<option value=" ++ item.name ++ ">" ++ item.name ++ "</option>"
+		) joinBy  ("")
+		
+		]			  
+						</select>				
+					</td>
+					<td>
+						<select name="fBG" id="fBG">
+							<option></option>
+						  #[%dw 2.0
+		output application/java
+		---
+		payload.bg.BG map ((item, index) -> if(payload.previous.fBG == item.BG_Name) "<option value=" ++ item.BG_Name ++ " selected='selected'>" ++ item.BG_Name ++ "</option>"
+											else 
+												"<option value=" ++ item.BG_Name ++ ">" ++ item.BG_Name ++ "</option>" 
+		) joinBy  ("")]	
+						</select>				
+					</td>
+					<input type="hidden" id="Authorization" name="Authorization" value=#[vars.AuthorizationToken]>
+			</input>
+			<input type="hidden" id="org_id" name="OrganizationID" value=#[vars.orgId]>
+			</input>
+					<td><input type="submit" value="Submit"></td>			
+				</tr>
+				
+				</table>
+			</div>
+			
+		</div>
+		<div class="row">
+			<div class="column">		
+				<table>
+				<tr>
+					<td><label for="productVersion">Product Version</label></td>
+					<td><label for="Api Name">API Name</label></td>			
+					<td><label for="clientId">Client Id</label></td>
+					<td><label for="clientName">Client Name</label></td>
+					<td><label for="time">Time</label></td>
+					<td><label for="count">Count</label></td>
+				</tr>
+							</tr>
+			#[%dw 2.0
+	output application/java
+	---
+	(payload.appDetails map ((item, index) ->
+	 "<tr><td><label for='productVersion'>" ++ item.productVersion ++ "</label></td>" ++ "\n" ++								
+	 			"<td><label for='api'>" ++  item.api ++ "</label></td>" ++ "\n" ++
+	 			"<td><label for='clientId'>" ++ item.clientId ++ "</label></td>" ++ "\n" ++
+	 			"<td><label for='clientName'>" ++ item.clientName ++ "</label></td>" ++ "\n" ++
+				"<td><label for='time'>" ++ item.time ++ "</label></td>" ++ "\n" ++				
+				"<td><label for='count'>" ++ item.count ++ "</label></td>" ++ "\n" ++
+				"</tr>" 
+				))]
+				</tr>							
+				</table>
+			</div>
+		</div>		
+</form>
+	</body>
+</html>
