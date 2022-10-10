@@ -1,6 +1,7 @@
 http:
-  port: "8081"
+  private:
+    port: "8081"
   
 anypoint:
-  username: "![PcztjhRkRgVF4BZnigBqCA==]"
-  password: "![HcTEwUQjHHycRivNOpE96A==]"
+  username: "![81JtgSSlqFy4weSP6BL53Q==]"
+  password: "![5icsrNBkAj/d97EMHYQLaA==]"
