@@ -9,12 +9,12 @@ http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/
 http://www.mulesoft.org/schema/mule/os http://www.mulesoft.org/schema/mule/os/current/mule-os.xsd
 http://www.mulesoft.org/schema/mule/secure-properties http://www.mulesoft.org/schema/mule/secure-properties/current/mule-secure-properties.xsd">
 	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="f0476c6a-242f-47d7-ad8e-cc873a360d3c" >
-		<http:listener-connection host="0.0.0.0" port="${http.port}" />
+		<http:listener-connection host="0.0.0.0" port="${http.private.port}" />
 	</http:listener-config>
 	<http:request-config name="Anypoint_HTTP_Request_configuration" doc:name="HTTP Request configuration" doc:id="d6d09ae6-2461-4c3f-9872-6c8d5cb22b07" enableCookies="false">
 		<http:request-connection protocol="HTTPS" host="anypoint.mulesoft.com" port="443"/>
 	</http:request-config>
-	<secure-properties:config name="Secure_Properties_Config" doc:name="Secure Properties Config" doc:id="734a5769-8a88-4434-a225-2c1bf412f7f9" file="dev.yaml" key="0123456789012345" >
+	<secure-properties:config name="Secure_Properties_Config" doc:name="Secure Properties Config" doc:id="734a5769-8a88-4434-a225-2c1bf412f7f9" file="dev.yaml" key="${env.key}" >
 		<secure-properties:encrypt algorithm="Blowfish" />
 	</secure-properties:config>
 	<configuration-properties doc:name="Configuration properties" doc:id="9c8de1ec-809d-465d-8b2c-491af5e78e6e" file="dev.yaml" />
@@ -108,7 +108,7 @@ payload.payload map
     "remainingOrgWorkers" : $.workers.remainingOrgWorkers,
     "muleVersion": $.muleVersion.version,
     "region" : $.region,
-    "staticIPsEnabled": $.staticIPsEnabled
+	"staticIPsEnabled": flatten (($.workerStatuses[?($.staticIPEnabled == true)].host) default []) joinBy  ','
 } default []]]></ee:set-variable>
 					</ee:variables>
 				</ee:transform>
@@ -172,7 +172,7 @@ output application/json skipNullOn="everywhere"
 								<ee:set-variable variableName="path"><![CDATA[%dw 2.0
 output application/java
 ---
-"/monitoring/api/visualizer/api/datasources/proxy/" ++ (vars.proxyDetails.proxies[?($.name == 'influxdb')])[0].id  ++ "/query?db=%22dias_mt_7_prod%22&q=SELECT%20sum(%22avg_request_count%22)%20FROM%20%22app_inbound_metric%22%20WHERE%20(%22org_id%22%20%3D%20%27" ++ vars.currentValues.orgId ++ "%27%20AND%20%22env_id%22%20%3D%20%27" ++ vars.currentValues.envId ++ "%27%20AND%20%22app_id%22%20%3D%20%27"++ payload.applicationName ++ "%27)%20AND%20time%20%3E%3D%20now()%20-%20365d%20GROUP%20BY%20time(1h)%2C%20%22app_id%22%20fill(none)&epoch=ms"]]></ee:set-variable>
+"/monitoring/api/visualizer/api/datasources/proxy/" ++ (vars.proxyDetails.proxies[?($.name == 'influxdb')])[0].id  ++ "/query?db=%22dias%22&q=SELECT%20sum(%22messageCount%22)%20FROM%20%22app_stats%22%20WHERE%20(%22org_id%22%20%3D%20%27" ++ vars.currentValues.orgId ++ "%27%20AND%20%22env_id%22%20%3D%20%27" ++ vars.currentValues.envId ++ "%27%20AND%20%22app_id%22%20%3D%20%27"++ payload.applicationName ++ "%27)%20AND%20time%20%3E%3D%20now()%20-%20365d%20GROUP%20BY%20time(30d)%2C%20%22app_id%22%20fill(none)&epoch=ms"]]></ee:set-variable>
 							</ee:variables>
 						</ee:transform>
 						<http:request method="GET" doc:name="Request" doc:id="1f4f75ac-5478-45ec-b06d-355683789ada" config-ref="Anypoint_HTTP_Request_configuration" path="#[vars.path]" responseTimeout="120000">
@@ -196,122 +196,15 @@ output application/java
 						<ee:set-variable variableName="usageDetails"><![CDATA[%dw 2.0
 output application/json
 ---
-payload.payload.*results map(series, sIndex)->( {
-     (series.series map(app, aIndex)-> (
+payload.payload.*results map(m1, sIndex)->( {
+     (m1.series map(app, aIndex)-> (
         {
             "name": app.tags.app_id[0],
-            "lastAccess": max((app.values[0] 
-            	map ((value, index) -> 
-            		{ "timeSpans": (value[0]) }
-            	)).timeSpans) as DateTime { unit: "milliseconds" } as String default "NA"
+            "lastAccess": (app.values[0][0][0]/1000) as DateTime as String {format: "yyyy-MM-dd HH:mm:ss.SSS"} ++ "=>" ++ (app.values[0][0][1]) 
         }
     ))
 })]]></ee:set-variable>
 						</ee:variables>
 					</ee:transform>
 	</flow>
-	<flow name="get-essential-details-flow" doc:id="a9c0c064-c5be-445c-a17c-0cab229c6ae2" >
-		<http:request method="POST" doc:name="login Request" doc:id="e335b422-3747-46a2-bd45-1dc7617441fe" config-ref="Anypoint_HTTP_Request_configuration" path="/accounts/login" targetValue='#["Bearer " ++ payload.access_token]' target="AuthorizationToken">
-					<http:body><![CDATA[#[%dw 2.0
-output application/json
----
-{
-    "username": p('secure::anypoint.username'),
-    "password": p('secure::anypoint.password')
-}]]]></http:body>
-				</http:request>
-		<http:request method="GET" doc:name="fetch orgId Request" doc:id="50914e07-3a3d-4ee3-b81c-1bf64eb6b326" config-ref="Anypoint_HTTP_Request_configuration" path="/accounts/api/me" target="orgId" targetValue="#[payload.user.organizationId]">
-					<http:headers><![CDATA[#[output application/java
----
-{
-	Authorization : vars.AuthorizationToken
-}]]]></http:headers>
-				</http:request>
-		<http:request method="GET" doc:name="get environments" doc:id="d6f62f74-c7e9-41fc-a4c2-62901a6f7a97" config-ref="Anypoint_HTTP_Request_configuration" path='#["/accounts/api/organizations/" ++ vars.orgId ++ "/environments"]' target="environments">
-							<http:headers><![CDATA[#[output application/java
----
-{
-	Authorization  : vars.AuthorizationToken
-}]]]></http:headers>
-						</http:request>
-	</flow>
-	<flow name="update-vcores-flow" doc:id="c899dd84-3c07-4b4f-8a18-2f87d04b43e2" >
-		
-				<http:request method="GET" doc:name="get hierarchy" doc:id="6caa6f47-18d9-4650-8850-e131b4cd9056" config-ref="Anypoint_HTTP_Request_configuration" path='#["/accounts/api/organizations/" ++ vars.orgId ++ "/hierarchy"]'>
-					<http:headers><![CDATA[#[output application/java
----
-{
-	Authorization : vars.AuthorizationToken
-}]]]></http:headers>
-				</http:request>
-						<ee:transform doc:name="Transform Message" doc:id="858822f6-a018-47ff-8361-1717aa6ec461" >
-			<ee:message >
-			</ee:message>
-			<ee:variables >
-				<ee:set-variable variableName="hierarchy" ><![CDATA[%dw 2.0
-var mainOrg = 	[{
-		"bgName":payload.name,
-        orgId: payload.id,
-		"assignedProd":payload.entitlements.vCoresProduction.assigned,
-		"assignedSandBox": payload.entitlements.vCoresSandbox.assigned,
-		"assignedDesign":	payload.entitlements.vCoresDesign.assigned 
-	}]
-
-var subOrgs = 
-	payload.subOrganizations map((value, index) -> {
-		"bgName":	value.name,
-        orgId: value.id,
-		"assignedProd":	value.entitlements.vCoresProduction.assigned,
-		"assignedSandBox": value.entitlements.vCoresSandbox.assigned,
-		"assignedDesign": value.entitlements.vCoresDesign.assigned 
-	}) 
-output application/json
----
-(mainOrg ++ subOrgs)
-
-]]></ee:set-variable>
-			</ee:variables>
-		</ee:transform>
-		<parallel-foreach doc:name="Parallel For Each" doc:id="166a9d2e-0fdf-43b5-bfde-8cd1ea6318c1" collection="#[vars.hierarchy]">
-			<http:request method="GET" doc:name="usage-Request" doc:id="263420f3-874c-4905-8ee2-5bea95fe4ad5" config-ref="Anypoint_HTTP_Request_configuration" path='#["/accounts/api/cs/organizations/"++ payload.orgId ++ "/usage"]' target="usage">
-								<http:headers><![CDATA[#[output application/java
----
-{
-	Authorization  : vars.AuthorizationToken
-}]]]></http:headers>
-							</http:request>
-			<ee:transform doc:name="Transform Message" doc:id="8a41d6b9-6da5-4c79-9ae9-fe2e52e08926">
-								<ee:message>
-									<ee:set-payload><![CDATA[%dw 2.0
-output application/json
----
-{
-	"BG_Name":payload.bgName,
-	orgId: payload.orgId,
-	"Production_assinged":payload.assignedProd,
-	"production_consumed": vars.usage.productionVCoresConsumed,
-	"Sandbox_assinged": payload.assignedSandBox,
-	"Sandbox_consumed": vars.usage.sandboxVCoresConsumed,
-	"Design_assinged":	payload.assignedDesign,
-	"Design_consumed": vars.usage.designVCoresConsumed
-}
-]]></ee:set-payload>
-								</ee:message>
-							</ee:transform>
-		</parallel-foreach>
-		<ee:transform doc:name="Concantinate Usage Response" doc:id="0687387e-52f2-4429-ac29-42aa3f1a1e14">
-								<ee:message>
-				<ee:set-payload ><![CDATA[%dw 2.0
-output application/json
----
-{
-	BG: payload.payload
-}]]></ee:set-payload>
-								</ee:message>
-								<ee:variables>
-								</ee:variables>
-							</ee:transform>
-		<logger level="INFO" doc:name="Logger" doc:id="9e88e0af-1b5c-4ccd-9075-edeb08410319" />
-		
-	</flow>
-</mule>
+		</mule>
